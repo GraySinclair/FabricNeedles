@@ -1,0 +1,74 @@
+name: strip-notebook-metadata-dependencies
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  strip:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout (PR branch)
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Checkout (push/workflow_dispatch)
+        if: github.event_name != 'pull_request'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Remove notebook metadata.dependencies (keep minified)
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          def strip_dependencies(ipynb: Path) -> bool:
+            raw = ipynb.read_text(encoding="utf-8")
+            nb = json.loads(raw)
+
+            md = nb.get("metadata")
+            if isinstance(md, dict) and "dependencies" in md:
+              md.pop("dependencies", None)
+
+            new_raw = json.dumps(nb, separators=(",", ":"), ensure_ascii=False) + "\n"
+            if new_raw != raw:
+              ipynb.write_text(new_raw, encoding="utf-8")
+              return True
+            return False
+
+          changed = False
+          for p in Path(".").rglob("*.ipynb"):
+            changed |= strip_dependencies(p)
+
+          print(f"changed={changed}")
+          PY
+
+      - name: Commit + push (if changed)
+        run: |
+          if git diff --quiet; then
+            echo "No changes."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add '*.ipynb'
+          git commit -m "chore: strip metadata.dependencies from notebooks"
+          git push
