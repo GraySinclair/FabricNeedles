@@ -6,7 +6,6 @@ repos:
         files: \.ipynb$
         args:
           - --extra-keys
-          - cell.id
           - cell.outputs
           - cell.execution_count
           - metadata.dependencies.lakehouse
