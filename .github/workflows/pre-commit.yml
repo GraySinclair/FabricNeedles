@@ -1,14 +1,14 @@
 name: notebooks-clean
 
 on:
+  workflow_dispatch:
+  push:
+    branches: [main]
   pull_request:
-    paths:
-      - "**/*.ipynb"
-      - ".pre-commit-config.yaml"
-      - ".github/workflows/pre-commit.yml"
 
 permissions:
   contents: write
+
 
 jobs:
   nbstripout_autofix:
