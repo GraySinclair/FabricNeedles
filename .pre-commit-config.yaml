@@ -1,6 +1,12 @@
 repos:
-- repo: https://github.com/kynan/nbstripout
-  rev: 0.9.0
-  hooks:
-    - id: nbstripout
-      args: ['--extra-keys=metadata.dependencies']
+  - repo: "https://github.com/kynan/nbstripout"
+    rev: "0.9.0"
+    hooks:
+      - id: nbstripout
+        files: \.ipynb$
+        args:
+          - --extra-keys
+          - cell.id
+          - cell.outputs
+          - cell.execution_count
+          - metadata.dependencies.lakehouse
