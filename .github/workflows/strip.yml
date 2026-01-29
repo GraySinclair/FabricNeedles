@@ -1,4 +1,4 @@
-name: strip-notebook-metadata-dependencies
+name: notebooks-clean
 
 on:
   push:
@@ -10,12 +10,11 @@ permissions:
   contents: write
 
 jobs:
-  strip:
+  nbstripout_autofix:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout (PR branch)
+      - name: Checkout PR branch
         if: github.event_name == 'pull_request'
         uses: actions/checkout@v4
         with:
@@ -32,34 +31,19 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Remove notebook metadata.dependencies (keep minified)
+      - name: Install pre-commit
+        run: python -m pip install --upgrade pip pre-commit
+
+      # Run nbstripout, but do NOT fail the job just because it modified files
+      - name: Run nbstripout (allow modifications)
         run: |
-          python - <<'PY'
-          import json
-          from pathlib import Path
+          set +e
+          pre-commit run nbstripout --all-files
+          rc=$?
+          set -e
+          echo "pre-commit exit code: $rc (ok if files were modified)"
 
-          def strip_dependencies(ipynb: Path) -> bool:
-            raw = ipynb.read_text(encoding="utf-8")
-            nb = json.loads(raw)
-
-            md = nb.get("metadata")
-            if isinstance(md, dict) and "dependencies" in md:
-              md.pop("dependencies", None)
-
-            new_raw = json.dumps(nb, separators=(",", ":"), ensure_ascii=False) + "\n"
-            if new_raw != raw:
-              ipynb.write_text(new_raw, encoding="utf-8")
-              return True
-            return False
-
-          changed = False
-          for p in Path(".").rglob("*.ipynb"):
-            changed |= strip_dependencies(p)
-
-          print(f"changed={changed}")
-          PY
-
-      - name: Commit + push (if changed)
+      - name: Commit + push changes (if any)
         run: |
           if git diff --quiet; then
             echo "No changes."
@@ -69,6 +53,12 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add '*.ipynb'
-          git commit -m "chore: strip metadata.dependencies from notebooks"
+          git add -A
+          git commit -m "chore: nbstripout normalize notebooks"
           git push
+
+      # Ensure the repo is clean after the auto-fix commit
+      - name: Verify clean
+        run: |
+          pre-commit run nbstripout --all-files
+          git diff --exit-code
